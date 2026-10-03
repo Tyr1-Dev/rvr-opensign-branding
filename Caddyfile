@@ -1,0 +1,51 @@
+{
+    auto_https off
+    admin off
+}
+# A TLS-terminating proxy in front forwards here.
+:80 {
+    route {
+        # Self sign-up and addadmin are refused (the operator has one service account; signers are made through the API).
+        @signup {
+            method POST
+            path /api/app/functions/addadmin /api/app/functions/usersignup /api/app/users /api/app/users/
+        }
+        respond @signup "Not available" 403
+        # the API, untouched
+        handle_path /api/* {
+            reverse_proxy opensign-server:8080
+        }
+        # RVR's face (brand/ is built by brand-web.sh from the running web app)
+        @logo path_regexp logo ^/assets/logo-[A-Za-z0-9_-]+\.png$
+        handle @logo {
+            root * /srv/brand
+            rewrite * /logo.jpg
+            header Content-Type image/jpeg
+            file_server
+        }
+        @brandjs file {
+            root /srv/brand
+            try_files {path}
+        }
+        handle @brandjs {
+            root * /srv/brand
+            file_server
+        }
+        handle /favicon.ico {
+            root * /srv/brand
+            file_server
+        }
+        handle /manifest.json {
+            root * /srv/brand
+            file_server
+        }
+        # every page of the single-page app gets RVR's index.html; real files go to the app as before
+        @spa not path /assets/* /static/* /locales/* /env.js /robots.txt /version.txt /sample_contacts.csv
+        handle @spa {
+            root * /srv/brand
+            rewrite * /index.html
+            file_server
+        }
+        reverse_proxy opensign-web:3000
+    }
+}
